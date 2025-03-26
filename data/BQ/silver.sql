@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS `nomanproject.silver_dataset.providers` (
     is_quarantined BOOLEAN
 );
 
+
 -- 2. Truncate Silver Table Before Inserting 
 TRUNCATE TABLE `nomanproject.silver_dataset.providers`;
 

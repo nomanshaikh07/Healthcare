@@ -116,10 +116,7 @@ def get_latest_watermark(table_name):
     for row in result:
         return row.latest_timestamp if row.latest_timestamp else "1900-01-01 00:00:00"
     return "1900-01-01 00:00:00"
-
 ##------------------------------------------------------------------------------------------------------------------##
-
-# Function to Extract Data from MySQL and Save to GCS
 def extract_and_save_to_landing(table, load_type, watermark_col):
     try:
         last_watermark = get_latest_watermark(table) if load_type.lower() == "incremental" else None
@@ -127,6 +124,8 @@ def extract_and_save_to_landing(table, load_type, watermark_col):
 
         query = f"(SELECT * FROM {table}) AS t" if load_type.lower() == "full" else \
                 f"(SELECT * FROM {table} WHERE {watermark_col} > '{last_watermark}') AS t"
+
+        log_event("DEBUG", f"Generated query for {table}: {query}", table=table)
 
         df = (spark.read.format("jdbc")
                 .option("url", MYSQL_CONFIG["url"])
@@ -148,9 +147,9 @@ def extract_and_save_to_landing(table, load_type, watermark_col):
         log_event("SUCCESS", f"✅ JSON file successfully written to gs://{GCS_BUCKET}/{JSON_FILE_PATH}", table=table)
         
         # Insert Audit Entry
-        audit_df = spark.createDataFrame([
-            ("hospital_a_db", table, load_type, df.count(), datetime.datetime.now(), "SUCCESS")], 
-            ["data_source", "tablename", "load_type", "record_count", "load_timestamp", "status"])
+        audit_df = spark.createDataFrame([(
+            "hospital_a_db", table, load_type, df.count(), datetime.datetime.now(), "SUCCESS"
+        )], ["data_source", "tablename", "load_type", "record_count", "load_timestamp", "status"])
 
         (audit_df.write.format("bigquery")
             .option("table", BQ_AUDIT_TABLE)
@@ -162,6 +161,51 @@ def extract_and_save_to_landing(table, load_type, watermark_col):
 
     except Exception as e:
         log_event("ERROR", f"Error processing {table}: {str(e)}", table=table)
+##------------------------------------------------------------------------------------------------------------------##
+
+# Function to Extract Data from MySQL and Save to GCS
+# def extract_and_save_to_landing(table, load_type, watermark_col):
+#     try:
+#         last_watermark = get_latest_watermark(table) if load_type.lower() == "incremental" else None
+#         log_event("INFO", f"Latest watermark for {table}: {last_watermark}", table=table)
+
+#         query = f"(SELECT * FROM {table}) AS t" if load_type.lower() == "full" else \
+#                 f"(SELECT * FROM {table} WHERE {watermark_col} > '{last_watermark}') AS t"
+
+#         df = (spark.read.format("jdbc")
+#                 .option("url", MYSQL_CONFIG["url"])
+#                 .option("user", MYSQL_CONFIG["user"])
+#                 .option("password", MYSQL_CONFIG["password"])
+#                 .option("driver", MYSQL_CONFIG["driver"])
+#                 .option("dbtable", query)
+#                 .load())
+
+#         log_event("SUCCESS", f"✅ Successfully extracted data from {table}", table=table)
+
+#         today = datetime.datetime.today().strftime('%d%m%Y')
+#         JSON_FILE_PATH = f"landing/{HOSPITAL_NAME}/{table}/{table}_{today}.json"
+
+#         bucket = storage_client.bucket(GCS_BUCKET)
+#         blob = bucket.blob(JSON_FILE_PATH)
+#         blob.upload_from_string(df.toPandas().to_json(orient="records", lines=True), content_type="application/json")
+
+#         log_event("SUCCESS", f"✅ JSON file successfully written to gs://{GCS_BUCKET}/{JSON_FILE_PATH}", table=table)
+        
+#         # Insert Audit Entry
+#         audit_df = spark.createDataFrame([
+#             ("hospital_a_db", table, load_type, df.count(), datetime.datetime.now(), "SUCCESS")], 
+#             ["data_source", "tablename", "load_type", "record_count", "load_timestamp", "status"])
+
+#         (audit_df.write.format("bigquery")
+#             .option("table", BQ_AUDIT_TABLE)
+#             .option("temporaryGcsBucket", GCS_BUCKET)
+#             .mode("append")
+#             .save())
+
+#         log_event("SUCCESS", f"✅ Audit log updated for {table}", table=table)
+
+#     except Exception as e:
+#         log_event("ERROR", f"Error processing {table}: {str(e)}", table=table)
 ##------------------------------------------------------------------------------------------------------------------##
 
 # Function to Read Config File from GCS

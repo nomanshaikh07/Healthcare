@@ -220,6 +220,7 @@ config_df = read_config_file()
 for row in config_df.collect():
     if row["is_active"] == '1' and row["datasource"] == "hospital_a_db": 
         db, src, table, load_type, watermark, _, targetpath = row
+        log_event("INFO", row)
         move_existing_files_to_archive(table)
         extract_and_save_to_landing(table, load_type, watermark)
         
